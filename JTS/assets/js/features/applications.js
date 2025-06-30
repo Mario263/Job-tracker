@@ -25,22 +25,59 @@
     console.log(`📋 Applications module initialized with ${applications.length} applications`);
   }
   
-  // Load applications from API or localStorage
+  // Load applications from storage manager or localStorage
   async function loadApplications() {
     try {
-      if (window.apiService) {
-        applications = await window.apiService.getApplications();
+      // Use storage manager if available, otherwise fallback to direct localStorage
+      let savedApplications;
+      if (window.storageManager) {
+        savedApplications = window.storageManager.loadApplications();
       } else {
-        applications = JSON.parse(localStorage.getItem('jobApplications') || '[]');
+        savedApplications = JSON.parse(localStorage.getItem('jobApplications') || '[]');
       }
       
-      // Update global reference for backward compatibility
-      window.applications = applications;
+      applications = savedApplications;
+      window.applications = savedApplications;
+      
+      console.log(`📋 Loaded ${applications.length} applications from storage`);
       
       renderApplications();
       
       if (typeof window.updateAnalytics === 'function') {
         window.updateAnalytics();
+      }
+      
+      // Try to sync with API if available (but don't block the UI)
+      if (window.apiService) {
+        try {
+          const apiApplications = await window.apiService.getApplications();
+          if (apiApplications && apiApplications.length > 0) {
+            // Merge API data with localStorage (localStorage takes precedence for user edits)
+            const mergedApplications = mergeApplicationData(savedApplications, apiApplications);
+            
+            // Only update if there are actual differences
+            if (JSON.stringify(mergedApplications) !== JSON.stringify(savedApplications)) {
+              applications = mergedApplications;
+              window.applications = mergedApplications;
+              
+              // Save merged data
+              if (window.storageManager) {
+                window.storageManager.saveApplications(mergedApplications);
+              } else {
+                localStorage.setItem('jobApplications', JSON.stringify(mergedApplications));
+              }
+              
+              console.log(`🔄 Synced with API: ${mergedApplications.length} total applications`);
+              renderApplications();
+              
+              if (typeof window.updateAnalytics === 'function') {
+                window.updateAnalytics();
+              }
+            }
+          }
+        } catch (apiError) {
+          console.log('📱 API sync failed, using local data only:', apiError.message);
+        }
       }
       
     } catch (error) {
@@ -120,8 +157,15 @@
         }
       }
       
-      // Update global reference
+      // Update global reference and save to storage
       window.applications = applications;
+      
+      // CRITICAL: Always save to localStorage immediately
+      if (window.storageManager) {
+        window.storageManager.saveApplications(applications);
+      } else {
+        localStorage.setItem('jobApplications', JSON.stringify(applications));
+      }
       
       // Always save to localStorage as backup
       localStorage.setItem('jobApplications', JSON.stringify(applications));
@@ -141,7 +185,20 @@
     }
   }
   
-  // Get form data - FIXED to prevent ObjectId issues and enum validation
+  // Merge application data from different sources
+  function mergeApplicationData(localData, apiData) {
+    const merged = [...localData];
+    const localIds = new Set(localData.map(app => app.id));
+    
+    // Add API applications that don't exist locally
+    apiData.forEach(apiApp => {
+      if (!localIds.has(apiApp.id)) {
+        merged.push(apiApp);
+      }
+    });
+    
+    return merged;
+  }
   function getFormData() {
     const data = {
       // Don't send ID - let MongoDB generate it
@@ -367,8 +424,12 @@
       
       window.applications = applications;
       
-      // Update localStorage
-      localStorage.setItem('jobApplications', JSON.stringify(applications));
+      // Update storage with storage manager
+      if (window.storageManager) {
+        window.storageManager.saveApplications(applications);
+      } else {
+        localStorage.setItem('jobApplications', JSON.stringify(applications));
+      }
       
       // Try to delete from API
       if (window.apiService) {
