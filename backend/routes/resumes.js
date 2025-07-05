@@ -5,7 +5,7 @@ const Resume = require('../models/Resume');
 // Get all resumes
 router.get('/', async (req, res) => {
   try {
-    const resumes = await Resume.find({ userId: 'default' }).sort({ uploadDate: -1 });
+    const resumes = await Resume.find({ userId: req.user.id }).sort({ uploadDate: -1 });
     res.json({ success: true, data: resumes });
   } catch (error) {
     console.error('Error fetching resumes:', error);
@@ -18,7 +18,7 @@ router.post('/', async (req, res) => {
   try {
     const resumeData = {
       ...req.body,
-      userId: 'default'
+      userId: req.user.id
     };
 
     // Validate required fields
@@ -32,7 +32,7 @@ router.post('/', async (req, res) => {
     // Check for duplicate names
     const existingResume = await Resume.findOne({ 
       name: { $regex: new RegExp(`^${resumeData.name}$`, 'i') }, 
-      userId: 'default' 
+      userId: req.user.id 
     });
     
     if (existingResume) {
@@ -58,8 +58,8 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
-    const resume = await Resume.findByIdAndUpdate(
-      id, 
+    const resume = await Resume.findOneAndUpdate(
+      { _id: id, userId: req.user.id }, 
       updateData, 
       { new: true, runValidators: true }
     );
@@ -82,13 +82,13 @@ router.patch('/:id/default', async (req, res) => {
 
     // Remove default from all other resumes
     await Resume.updateMany(
-      { userId: 'default', _id: { $ne: id } },
+      { userId: req.user.id, _id: { $ne: id } },
       { isDefault: false }
     );
 
     // Set this resume as default
-    const resume = await Resume.findByIdAndUpdate(
-      id, 
+    const resume = await Resume.findOneAndUpdate(
+      { _id: id, userId: req.user.id }, 
       { isDefault: true }, 
       { new: true }
     );
@@ -109,7 +109,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const resume = await Resume.findByIdAndDelete(id);
+    const resume = await Resume.findOneAndDelete({ _id: id, userId: req.user.id });
 
     if (!resume) {
       return res.status(404).json({ success: false, error: 'Resume not found' });
@@ -117,7 +117,7 @@ router.delete('/:id', async (req, res) => {
 
     // If deleted resume was default, make the first available resume default
     if (resume.isDefault) {
-      const firstResume = await Resume.findOne({ userId: 'default' }).sort({ uploadDate: -1 });
+      const firstResume = await Resume.findOne({ userId: req.user.id }).sort({ uploadDate: -1 });
       if (firstResume) {
         firstResume.isDefault = true;
         await firstResume.save();
@@ -135,7 +135,7 @@ router.delete('/:id', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const resume = await Resume.findById(id);
+    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
 
     if (!resume) {
       return res.status(404).json({ success: false, error: 'Resume not found' });

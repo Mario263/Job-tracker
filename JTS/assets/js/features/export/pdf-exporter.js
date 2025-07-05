@@ -3,7 +3,8 @@
 const PDFExporter = {
   async exportToPDF() {
     try {
-      if (typeof jsPDF === 'undefined') {
+      // Check if jsPDF library is loaded properly
+      if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
         showMessage('PDF library not loaded. Please refresh the page.', 'error');
         return;
       }

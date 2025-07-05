@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Job Tracker - Sign In</title>
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==">
+  
+  <!-- Use the same CSS as main app -->
+  <link rel="stylesheet" href="assets/css/main.css"/>
+  
+  <style>
+    /* Auth-specific styles that match your current UI */
+    .auth-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .auth-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      max-width: 1200px;
+      width: 100%;
+      align-items: center;
+    }
+    
+    .auth-content {
+      padding: 2rem;
+    }
+    
+    .auth-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(15px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-2xl);
+      box-shadow: var(--glass-shadow);
+      padding: 3rem;
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    
+    .auth-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    
+    .auth-header h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .feature-grid {
+      display: grid;
+      gap: 2rem;
+      margin-bottom: 2rem;
+    }
+    
+    .feature-item {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-start;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: all 0.3s ease;
+    }
+    
+    .feature-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0, 122, 255, 0.2);
+    }
+    
+    .feature-icon {
+      font-size: 2rem;
+      min-width: 2rem;
+    }
+    
+    .feature-content h3 {
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    
+    .feature-content p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      margin: 0;
+    }
+    
+    .auth-tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: var(--radius-lg);
+      padding: 0.5rem;
+      margin-bottom: 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .auth-tab {
+      flex: 1;
+      background: none;
+      border: none;
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .auth-tab.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+    }
+    
+    .auth-form {
+      display: none;
+    }
+    
+    .auth-form.active {
+      display: block;
+    }
+    
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+      font-size: 1rem;
+      transition: all 0.3s ease;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .auth-button {
+      width: 100%;
+      padding: 1rem;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    
+    .auth-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 122, 255, 0.4);
+    }
+    
+    .auth-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .error-message {
+      background: rgba(255, 59, 48, 0.1);
+      border: 1px solid rgba(255, 59, 48, 0.3);
+      color: var(--danger);
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      margin-bottom: 1rem;
+      display: none;
+    }
+    
+    .success-message {
+      background: rgba(52, 199, 89, 0.1);
+      border: 1px solid rgba(52, 199, 89, 0.3);
+      color: var(--success);
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      margin-bottom: 1rem;
+      display: none;
+    }
+    
+    .loading-spinner {
+      display: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top: 2px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .auth-footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+    
+    /* Responsive design */
+    @media (max-width: 1024px) {
+      .auth-layout {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+      }
+      
+      .auth-content {
+        order: 2;
+      }
+      
+      .auth-card {
+        order: 1;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .auth-card {
+        padding: 2rem;
+        margin: 1rem;
+      }
+      
+      .auth-header h1 {
+        font-size: 2.5rem;
+      }
+      
+      .feature-grid {
+        gap: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-layout">
+      <!-- Content Section -->
+      <div class="auth-content">
+        <div style="text-align: center; margin-bottom: 3rem;">
+          <h1 style="font-size: 3rem; font-weight: 700; margin-bottom: 1rem; background: linear-gradient(135deg, var(--primary), var(--primary-light)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+            Job Tracker
+          </h1>
+          <p style="font-size: 1.2rem; color: var(--text-secondary); margin: 0;">
+            Your comprehensive job application management system
+          </p>
+        </div>
+        
+        <div class="feature-grid">
+          <div class="feature-item">
+            <div class="feature-icon">📋</div>
+            <div class="feature-content">
+              <h3>Track Applications</h3>
+              <p>Organize all your job applications in one place with status tracking, follow-ups, and detailed notes.</p>
+            </div>
+          </div>
+          
+          <div class="feature-item">
+            <div class="feature-icon">👥</div>
+            <div class="feature-content">
+              <h3>Manage Contacts</h3>
+              <p>Build and maintain your professional network with contact management and relationship tracking.</p>
+            </div>
+          </div>
+          
+          <div class="feature-item">
+            <div class="feature-icon">📄</div>
+            <div class="feature-content">
+              <h3>Resume & Cover Letters</h3>
+              <p>Upload multiple resume versions and generate personalized cover letters instantly.</p>
+            </div>
+          </div>
+          
+          <div class="feature-item">
+            <div class="feature-icon">📊</div>
+            <div class="feature-content">
+              <h3>Success Analytics</h3>
+              <p>Analyze your application success rates and optimize your job search strategy with detailed insights.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Auth Card -->
+      <div class="auth-card">
+        <div class="auth-header">
+          <h2 style="font-size: 2rem; margin-bottom: 0.5rem;">Welcome</h2>
+          <p style="color: var(--text-secondary); margin: 0;">Sign in to your account or create a new one</p>
+        </div>
+        
+        <div class="auth-tabs">
+          <button class="auth-tab active" onclick="switchAuthTab('signin')">Sign In</button>
+          <button class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</button>
+        </div>
+        
+        <div id="error-message" class="error-message"></div>
+        <div id="success-message" class="success-message"></div>
+        
+        <!-- Sign In Form -->
+        <form id="signin-form" class="auth-form active">
+          <div class="form-group">
+            <label for="signin-email">Email Address</label>
+            <input type="email" id="signin-email" required placeholder="your.email@domain.com">
+          </div>
+          <div class="form-group">
+            <label for="signin-password">Password</label>
+            <input type="password" id="signin-password" required placeholder="Enter your password">
+          </div>
+          <button type="submit" class="auth-button">
+            <span class="loading-spinner" id="signin-spinner"></span>
+            Sign In
+          </button>
+        </form>
+        
+        <!-- Sign Up Form -->
+        <form id="signup-form" class="auth-form">
+          <div class="form-group">
+            <label for="signup-name">Full Name</label>
+            <input type="text" id="signup-name" required placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label for="signup-email">Email Address</label>
+            <input type="email" id="signup-email" required placeholder="your.email@domain.com">
+          </div>
+          <div class="form-group">
+            <label for="signup-password">Password</label>
+            <input type="password" id="signup-password" required placeholder="Choose a strong password" minlength="8">
+          </div>
+          <div class="form-group">
+            <label for="signup-confirm-password">Confirm Password</label>
+            <input type="password" id="signup-confirm-password" required placeholder="Confirm your password">
+          </div>
+          <button type="submit" class="auth-button">
+            <span class="loading-spinner" id="signup-spinner"></span>
+            Create Account
+          </button>
+        </form>
+        
+        <div class="auth-footer">
+          <p><strong>🔒 Secure • 🔐 Private • ☁️ Cloud-based</strong></p>
+          <p>Your data is encrypted and stored safely in the cloud</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Authentication JavaScript -->
+  <script src="assets/js/core/config.js"></script>
+  <script src="start.js"></script>
+  <script>
+    // Authentication functions
+    let isLoading = false;
+
+    // API Configuration
+    const API_BASE_URL = window.location.hostname === 'localhost' 
+      ? 'http://localhost:3001/api' 
+      : 'https://your-production-api.vercel.app/api';
+
+    function switchAuthTab(tab) {
+      const signinTab = document.querySelector('.auth-tab:first-child');
+      const signupTab = document.querySelector('.auth-tab:last-child');
+      const signinForm = document.getElementById('signin-form');
+      const signupForm = document.getElementById('signup-form');
+      
+      // Clear messages
+      hideMessage();
+      
+      if (tab === 'signin') {
+        signinTab.classList.add('active');
+        signupTab.classList.remove('active');
+        signinForm.classList.add('active');
+        signupForm.classList.remove('active');
+      } else {
+        signupTab.classList.add('active');
+        signinTab.classList.remove('active');
+        signupForm.classList.add('active');
+        signinForm.classList.remove('active');
+      }
+    }
+
+    function showMessage(message, type = 'error') {
+      const errorDiv = document.getElementById('error-message');
+      const successDiv = document.getElementById('success-message');
+      
+      if (type === 'error') {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        successDiv.style.display = 'none';
+      } else {
+        successDiv.textContent = message;
+        successDiv.style.display = 'block';
+        errorDiv.style.display = 'none';
+      }
+    }
+
+    function hideMessage() {
+      document.getElementById('error-message').style.display = 'none';
+      document.getElementById('success-message').style.display = 'none';
+    }
+
+    function validateEmail(email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return emailRegex.test(email) && email.length <= 254; // RFC 5321 limit
+    }
+
+    function validateName(name) {
+      return name && name.trim().length >= 2 && name.trim().length <= 50;
+    }
+
+    function validatePassword(password) {
+      if (!password || password.length < 8) return false;
+      
+      // Check for common weak passwords
+      const weakPasswords = ['password', '12345678', 'qwerty123', 'password123'];
+      if (weakPasswords.includes(password.toLowerCase())) return false;
+      
+      return true;
+    }
+
+    function setLoading(form, loading) {
+      const button = form.querySelector('.auth-button');
+      const spinner = form.querySelector('.loading-spinner');
+      
+      if (loading) {
+        button.disabled = true;
+        spinner.style.display = 'block';
+      } else {
+        button.disabled = false;
+        spinner.style.display = 'none';
+      }
+      
+      isLoading = loading;
+    }
+
+    // Sign In Handler
+    document.getElementById('signin-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      if (isLoading) return;
+      
+      const email = document.getElementById('signin-email').value.trim();
+      const password = document.getElementById('signin-password').value;
+      
+      // Validation
+      if (!email) {
+        showMessage('Please enter your email address');
+        return;
+      }
+      
+      if (!validateEmail(email)) {
+        showMessage('Please enter a valid email address');
+        return;
+      }
+      
+      if (!password) {
+        showMessage('Please enter your password');
+        return;
+      }
+      
+      setLoading(this, true);
+      hideMessage();
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await fetch(`${API_BASE_URL}/auth/signin`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Server error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Store authentication data
+        localStorage.setItem('jobTracker_token', data.token);
+        localStorage.setItem('jobTracker_user', JSON.stringify(data.user));
+        
+        showMessage('Sign in successful! Redirecting...', 'success');
+        
+        // Redirect to main app
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+        
+      } catch (error) {
+        console.error('Sign in error:', error);
+        
+        if (error.name === 'AbortError') {
+          showMessage('Request timed out. Please try again.');
+        } else if (error.message.includes('Failed to fetch')) {
+          showMessage('Unable to connect to server. Please check your internet connection.');
+        } else {
+          showMessage(error.message || 'Sign in failed. Please try again.');
+        }
+      } finally {
+        setLoading(this, false);
+      }
+    });
+
+    // Sign Up Handler
+    document.getElementById('signup-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      if (isLoading) return;
+      
+      const name = document.getElementById('signup-name').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value;
+      const confirmPassword = document.getElementById('signup-confirm-password').value;
+      
+      // Validation
+      if (!validateName(name)) {
+        showMessage('Name must be between 2 and 50 characters');
+        return;
+      }
+      
+      if (!email) {
+        showMessage('Please enter your email address');
+        return;
+      }
+      
+      if (!validateEmail(email)) {
+        showMessage('Please enter a valid email address');
+        return;
+      }
+      
+      if (!validatePassword(password)) {
+        showMessage('Password must be at least 8 characters and not a common weak password');
+        return;
+      }
+      
+      if (!confirmPassword) {
+        showMessage('Please confirm your password');
+        return;
+      }
+      
+      if (password !== confirmPassword) {
+        showMessage('Passwords do not match');
+        return;
+      }
+      
+      setLoading(this, true);
+      hideMessage();
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for signup
+        
+        const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Server error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Store authentication data
+        localStorage.setItem('jobTracker_token', data.token);
+        localStorage.setItem('jobTracker_user', JSON.stringify(data.user));
+        
+        showMessage('Account created successfully! Welcome to Job Tracker! Redirecting...', 'success');
+        
+        // Redirect to main app
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+        
+      } catch (error) {
+        console.error('Sign up error:', error);
+        
+        if (error.name === 'AbortError') {
+          showMessage('Request timed out. Please try again.');
+        } else if (error.message.includes('Failed to fetch')) {
+          showMessage('Unable to connect to server. Please check your internet connection.');
+        } else {
+          showMessage(error.message || 'Sign up failed. Please try again.');
+        }
+      } finally {
+        setLoading(this, false);
+      }
+    });
+
+    // Check if user is already signed in
+    if (localStorage.getItem('jobTracker_token')) {
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

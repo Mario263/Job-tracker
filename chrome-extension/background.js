@@ -25,6 +25,16 @@ class JobTrackerBackground {
     // Test connection immediately
     this.testCloudConnection();
     
+    // Try to sync auth token from main app immediately and periodically
+    setTimeout(() => {
+      this.syncAuthToken();
+    }, 1000);
+    
+    // Try again after 5 seconds in case main app wasn't ready
+    setTimeout(() => {
+      this.syncAuthToken();
+    }, 5000);
+    
     console.log('✅ Job Tracker Extension Background Service Worker initialized');
   }
 
@@ -44,10 +54,18 @@ class JobTrackerBackground {
       return true; // Keep message channel open for async response
     });
 
-    // Handle tab updates to inject content script
+    // Handle tab updates to inject content script and sync auth
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (changeInfo.status === 'complete' && tab.url) {
         this.checkAndInjectContentScript(tabId, tab.url);
+        
+        // Check if this is a main app tab and sync token
+        if (tab.url && (tab.url.includes('localhost:8080') || tab.url.includes('.vercel.app'))) {
+          console.log('Main app tab loaded, syncing auth token...');
+          setTimeout(() => {
+            this.syncAuthToken();
+          }, 3000); // Wait for app to load
+        }
       }
     });
 
@@ -101,6 +119,21 @@ class JobTrackerBackground {
           sendResponse({ success: true, data: result });
           break;
 
+        case 'setAuthToken':
+          await this.setAuthToken(message.token);
+          sendResponse({ success: true });
+          break;
+
+        case 'removeAuthToken':
+          await this.removeAuthToken();
+          sendResponse({ success: true });
+          break;
+
+        case 'syncAuthToken':
+          const token = await this.syncAuthToken();
+          sendResponse({ success: true, token });
+          break;
+
         case 'getApplications':
           const apps = await this.getApplications();
           sendResponse({ success: true, data: apps });
@@ -117,6 +150,10 @@ class JobTrackerBackground {
             chrome.tabs.sendMessage(sender.tab.id, message);
           }
           sendResponse({ success: true });
+          break;
+
+        case 'ping':
+          sendResponse({ success: true, message: 'Extension is active' });
           break;
 
         default:
@@ -166,11 +203,19 @@ class JobTrackerBackground {
       console.log('🔄 Attempting to save application to:', `${this.apiUrl}/api/applications`);
       console.log('📤 Application data:', applicationData);
       
+      // Get auth token from storage
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ No authentication token found');
+        throw new Error('Authentication required. Please sign in to Job Tracker.');
+      }
+      
       // Save directly to cloud API
       const response = await fetch(`${this.apiUrl}/api/applications`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
           ...applicationData,
@@ -200,10 +245,18 @@ class JobTrackerBackground {
 
   async getApplications() {
     try {
+      // Get auth token from storage
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ No authentication token found');
+        return [];
+      }
+      
       const response = await fetch(`${this.apiUrl}/api/applications`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
         }
       });
 
@@ -316,11 +369,136 @@ class JobTrackerBackground {
     }
   }
 
+  // Authentication token management
+  async getAuthToken() {
+    try {
+      const result = await chrome.storage.local.get(['authToken']);
+      return result.authToken;
+    } catch (error) {
+      console.error('Failed to get auth token:', error);
+      return null;
+    }
+  }
+
+  async setAuthToken(token) {
+    try {
+      await chrome.storage.local.set({ authToken: token });
+      console.log('✅ Auth token stored in extension');
+    } catch (error) {
+      console.error('Failed to store auth token:', error);
+    }
+  }
+
+  async removeAuthToken() {
+    try {
+      await chrome.storage.local.remove(['authToken']);
+      console.log('✅ Auth token removed from extension');
+    } catch (error) {
+      console.error('Failed to remove auth token:', error);
+    }
+  }
+
+  // Sync auth token from main app
+  async syncAuthToken() {
+    try {
+      console.log('🔄 Attempting to sync auth token from main app...');
+      
+      // Check if main app is open and get token from it via messaging
+      const tabs = await chrome.tabs.query({});
+      const mainAppTabs = tabs.filter(tab => 
+        tab.url && (
+          tab.url.includes('localhost:8080') || 
+          tab.url.includes('127.0.0.1:8080') ||
+          tab.url.includes('.vercel.app')
+        )
+      );
+      
+      console.log(`Found ${mainAppTabs.length} potential main app tabs`);
+      
+      for (const tab of mainAppTabs) {
+        try {
+          console.log('Trying to get token from tab:', tab.url);
+          
+          // Try to message the main app tab directly
+          const response = await chrome.tabs.sendMessage(tab.id, {
+            action: 'getAuthToken'
+          });
+          
+          if (response && response.token) {
+            await this.setAuthToken(response.token);
+            console.log('✅ Auth token synced from main app via messaging');
+            
+            // Also store user data if available
+            if (response.user) {
+              await chrome.storage.local.set({ 
+                userData: typeof response.user === 'string' ? JSON.parse(response.user) : response.user
+              });
+            }
+            
+            return response.token;
+          }
+        } catch (error) {
+          console.log('Could not sync token from tab via messaging:', tab.id, error.message);
+          
+          // Fallback: try content script injection if messaging fails
+          try {
+            if (tab.url.includes('localhost:8080') || tab.url.includes('127.0.0.1:8080')) {
+              const results = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                  try {
+                    return {
+                      token: localStorage.getItem('jobTracker_token'),
+                      user: localStorage.getItem('jobTracker_user')
+                    };
+                  } catch (e) {
+                    return null;
+                  }
+                }
+              });
+              
+              if (results && results[0] && results[0].result && results[0].result.token) {
+                const tokenData = results[0].result;
+                await this.setAuthToken(tokenData.token);
+                console.log('✅ Auth token synced from main app via scripting fallback');
+                
+                if (tokenData.user) {
+                  await chrome.storage.local.set({ 
+                    userData: JSON.parse(tokenData.user)
+                  });
+                }
+                
+                return tokenData.token;
+              }
+            }
+          } catch (scriptError) {
+            console.log('Scripting fallback also failed:', scriptError.message);
+          }
+        }
+      }
+      
+      console.warn('⚠️ No main app tabs found with valid tokens');
+      return null;
+    } catch (error) {
+      console.error('Failed to sync auth token:', error);
+      return null;
+    }
+  }
+
   setupPeriodicHealthCheck() {
     // Check API health every 30 minutes
     setInterval(() => {
       this.testCloudConnection();
     }, 30 * 60 * 1000);
+    
+    // Sync auth token every 5 minutes if not present
+    setInterval(async () => {
+      const currentToken = await this.getAuthToken();
+      if (!currentToken) {
+        console.log('🔄 No auth token found, attempting periodic sync...');
+        this.syncAuthToken();
+      }
+    }, 5 * 60 * 1000);
   }
 
   async migrateData() {

@@ -9,9 +9,13 @@ const connectDB = require('./config/database');
 const app = express();
 
 // Import routes
+const authRouter = require('./routes/auth');
 const applicationsRouter = require('./routes/applications');
 const contactsRouter = require('./routes/contacts');
 const resumesRouter = require('./routes/resumes');
+
+// Import middleware
+const { authenticate, optionalAuth } = require('./middleware/auth');
 
 // CORS configuration
 app.use(cors({
@@ -52,9 +56,10 @@ app.get('/', (req, res) => {
 });
 
 // API routes
-app.use('/api/applications', applicationsRouter);
-app.use('/api/contacts', contactsRouter);
-app.use('/api/resumes', resumesRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/applications', authenticate, applicationsRouter);
+app.use('/api/contacts', authenticate, contactsRouter);
+app.use('/api/resumes', authenticate, resumesRouter);
 
 
 // Initialize database connection

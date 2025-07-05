@@ -2,17 +2,17 @@ const express = require('express');
 const router = express.Router();
 const Application = require('../models/Application');
 
-// GET all applications
+// GET all applications for the authenticated user
 router.get('/', async (req, res) => {
   try {
-    const applications = await Application.find().sort({ dateAdded: -1 });
+    const applications = await Application.find({ userId: req.user.id }).sort({ dateAdded: -1 });
     res.json(applications);
   } catch (error) {
     console.error('Error fetching applications:', error);
     res.status(500).json({ error: 'Failed to fetch applications' });
   }
 });
-// POST new application
+// POST new application for the authenticated user
 router.post('/', async (req, res) => {
   try {
     // 🚫 Remove _id and id if frontend accidentally sends them
@@ -23,7 +23,9 @@ router.post('/', async (req, res) => {
       delete req.body.id;
     }
 
-    const application = new Application(req.body);
+    // Add userId to the application
+    const applicationData = { ...req.body, userId: req.user.id };
+    const application = new Application(applicationData);
     const savedApplication = await application.save();
     res.status(201).json(savedApplication);
   } catch (error) {
@@ -43,11 +45,11 @@ router.post('/', async (req, res) => {
 //   }
 // });
 
-// PUT update application
+// PUT update application for the authenticated user
 router.put('/:id', async (req, res) => {
   try {
-    const application = await Application.findByIdAndUpdate(
-      req.params.id,
+    const application = await Application.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
       req.body,
       { new: true, runValidators: true }
     );
@@ -63,10 +65,10 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE application
+// DELETE application for the authenticated user
 router.delete('/:id', async (req, res) => {
   try {
-    const application = await Application.findByIdAndDelete(req.params.id);
+    const application = await Application.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
     
     if (!application) {
       return res.status(404).json({ error: 'Application not found' });
@@ -79,11 +81,12 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET application statistics
+// GET application statistics for the authenticated user
 router.get('/stats', async (req, res) => {
   try {
-    const total = await Application.countDocuments();
+    const total = await Application.countDocuments({ userId: req.user.id });
     const statusCounts = await Application.aggregate([
+      { $match: { userId: req.user.id } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
     

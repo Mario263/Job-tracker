@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Contact = require('../models/Contact');
 
-// GET all contacts
+// GET all contacts for the authenticated user
 router.get('/', async (req, res) => {
   try {
-    const contacts = await Contact.find().sort({ dateAdded: -1 });
+    const contacts = await Contact.find({ userId: req.user.id }).sort({ dateAdded: -1 });
     res.json(contacts);
   } catch (error) {
     console.error('Error fetching contacts:', error);
@@ -13,10 +13,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST new contact
+// POST new contact for the authenticated user
 router.post('/', async (req, res) => {
   try {
-    const contact = new Contact(req.body);
+    const contactData = { ...req.body, userId: req.user.id };
+    const contact = new Contact(contactData);
     const savedContact = await contact.save();
     res.status(201).json(savedContact);
   } catch (error) {
@@ -25,11 +26,11 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT update contact
+// PUT update contact for the authenticated user
 router.put('/:id', async (req, res) => {
   try {
-    const contact = await Contact.findByIdAndUpdate(
-      req.params.id,
+    const contact = await Contact.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
       req.body,
       { new: true, runValidators: true }
     );
@@ -48,7 +49,7 @@ router.put('/:id', async (req, res) => {
 // DELETE contact
 router.delete('/:id', async (req, res) => {
   try {
-    const contact = await Contact.findByIdAndDelete(req.params.id);
+    const contact = await Contact.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
     
     if (!contact) {
       return res.status(404).json({ error: 'Contact not found' });

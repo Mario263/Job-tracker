@@ -95,11 +95,21 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function waitForAuthentication() {
   return new Promise((resolve) => {
     const checkAuth = () => {
-      if (window.AuthCheck) {
-        // Authentication module is loaded, proceed
+      // Check if auth module is loaded and user is authenticated
+      const token = localStorage.getItem('jobTracker_token');
+      const hasApiService = window.apiService && window.apiService.setAuthToken;
+      
+      if (token && hasApiService) {
+        // Set up API authentication first
+        window.apiService.setAuthToken(token);
+        console.log('🔐 Authentication token set for API service');
         resolve();
+      } else if (!token) {
+        // No token - user needs to sign in
+        console.log('🔐 No authentication token found');
+        resolve(); // Still resolve to allow redirect to signin
       } else {
-        // Wait a bit longer for auth module to load
+        // Wait for API service to load
         setTimeout(checkAuth, 100);
       }
     };

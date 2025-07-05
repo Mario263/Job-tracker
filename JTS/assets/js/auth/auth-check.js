@@ -68,6 +68,9 @@
       window.apiService.setAuthToken(token);
     }
     
+    // Send token to Chrome extension if available
+    sendTokenToExtension(token);
+    
     // Override fetch to include auth header
     const originalFetch = window.fetch;
     window.fetch = function(url, options = {}) {
@@ -80,6 +83,24 @@
       }
       return originalFetch(url, options);
     };
+  }
+  
+  // Send authentication token to Chrome extension
+  function sendTokenToExtension(token) {
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      try {
+        chrome.runtime.sendMessage({ 
+          action: 'setAuthToken', 
+          token: token 
+        }, (response) => {
+          if (!chrome.runtime.lastError) {
+            console.log('🔐 Auth token sent to extension successfully');
+          }
+        });
+      } catch (error) {
+        console.log('📱 Could not send auth token to extension:', error);
+      }
+    }
   }
   
   // Update UI with user information

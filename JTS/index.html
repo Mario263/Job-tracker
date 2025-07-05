@@ -12,6 +12,7 @@
   <!-- External Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://apis.google.com/js/api.js"></script>
   
   <!-- Core JavaScript (Load First) -->
@@ -19,6 +20,7 @@
   <script src="assets/js/core/utils.js"></script>
   <script src="assets/js/core/error-handler.js"></script>
   <script src="assets/js/core/api.js"></script>
+  <script src="assets/js/auth/auth-check.js"></script>
   <script src="assets/js/core/app.js"></script>
 </head>
 <body>
@@ -542,6 +544,35 @@
   
   <!-- Integration JavaScript (Load Third) -->
   <script src="assets/js/integrations/chrome-extension.js"></script>
+  
+  <!-- Extension Message Bridge -->
+  <script>
+    // Simple message bridge for Chrome extension
+    console.log('🔗 Setting up extension message bridge...');
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        console.log('📨 Main app received extension message:', request);
+        
+        if (request.action === 'getAuthToken') {
+          const token = localStorage.getItem('jobTracker_token');
+          const user = localStorage.getItem('jobTracker_user');
+          console.log('🔗 Extension requesting auth token:', token ? 'Found' : 'Not found');
+          sendResponse({ 
+            success: true, 
+            token: token,
+            user: user 
+          });
+          return true; // Keep message channel open
+        }
+        
+        return false;
+      });
+      console.log('✅ Extension message bridge ready');
+    } else {
+      console.log('ℹ️ Chrome extension API not available');
+    }
+  </script>
+  
   <!-- Cover Letter Generator -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>

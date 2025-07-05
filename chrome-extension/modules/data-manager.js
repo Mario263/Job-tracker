@@ -205,10 +205,26 @@ const DataManager = {
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     
     try {
+      // Get auth token from storage
+      let authToken = null;
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        try {
+          const result = await chrome.storage.local.get(['authToken']);
+          authToken = result.authToken;
+        } catch (error) {
+          console.warn('Could not get auth token from storage:', error);
+        }
+      }
+
+      if (!authToken) {
+        throw new Error('Authentication required. Please sign in to Job Tracker.');
+      }
+
       const response = await fetch(`${apiUrl}/api/applications`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify(applicationData),
         signal: controller.signal

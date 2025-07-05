@@ -68,8 +68,25 @@
                         refreshAllData();
                         sendResponse({ success: true });
                     }
+                    
+                    if (request.action === 'getAuthToken') {
+                        const token = localStorage.getItem('jobTracker_token');
+                        const user = localStorage.getItem('jobTracker_user');
+                        console.log('🔗 Extension requesting auth token:', token ? 'Found' : 'Not found');
+                        sendResponse({ 
+                            success: true, 
+                            token: token,
+                            user: user 
+                        });
+                    }
                 });
                 console.log('📱 Extension message listener setup complete');
+                
+                // Send auth token to extension when available
+                const token = localStorage.getItem('jobTracker_token');
+                if (token) {
+                    sendAuthTokenToExtension(token);
+                }
             }
 
             // Window postMessage listener for cross-window communication
@@ -160,7 +177,7 @@
             syncButton.style.cssText = `
                 position: absolute;
                 top: 10px;
-                right: 10px;
+                right: 150px;
                 background: linear-gradient(135deg, #007AFF, #5AC8FA);
                 color: white;
                 border: none;
@@ -207,6 +224,24 @@
         }
     }
     
+    // Send auth token to extension
+    function sendAuthTokenToExtension(token) {
+        if (typeof chrome !== 'undefined' && chrome.runtime) {
+            try {
+                chrome.runtime.sendMessage({ 
+                    action: 'setAuthToken', 
+                    token: token 
+                }, (response) => {
+                    if (!chrome.runtime.lastError) {
+                        console.log('🔐 Auth token sent to extension');
+                    }
+                });
+            } catch (error) {
+                console.log('📱 Could not send auth token to extension:', error);
+            }
+        }
+    }
+    
     // Check for extension sync requests
     function checkExtensionConnection() {
         if (typeof chrome !== 'undefined' && chrome.runtime) {
@@ -216,6 +251,12 @@
                     if (!chrome.runtime.lastError) {
                         console.log('📱 Chrome extension connected');
                         showNotification('📱 Chrome extension connected', 'success', 2000);
+                        
+                        // Send current auth token if available
+                        const token = localStorage.getItem('jobTracker_token');
+                        if (token) {
+                            sendAuthTokenToExtension(token);
+                        }
                     }
                 });
             } catch (error) {
@@ -244,7 +285,7 @@
         console.log('✅ Chrome Extension Integration initialized (Cloud-Only)');
     }
     
-    // Add required CSS animations
+    // Add required CSS animations and responsive styles
     const style = document.createElement('style');
     style.textContent = `
         @keyframes slideInRight {
@@ -266,6 +307,39 @@
             to {
                 transform: translateX(100%);
                 opacity: 0;
+            }
+        }
+        
+        /* Responsive positioning for header buttons */
+        @media (max-width: 768px) {
+            #chrome-sync-btn {
+                position: absolute !important;
+                top: 60px !important;
+                right: 10px !important;
+                font-size: 0.8em !important;
+                padding: 6px 12px !important;
+            }
+            
+            #signout-btn {
+                position: absolute !important;
+                top: 10px !important;
+                right: 10px !important;
+                font-size: 0.8em !important;
+                padding: 6px 12px !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            #chrome-sync-btn {
+                right: 5px !important;
+                font-size: 0.7em !important;
+                padding: 4px 8px !important;
+            }
+            
+            #signout-btn {
+                right: 5px !important;
+                font-size: 0.7em !important;
+                padding: 4px 8px !important;
             }
         }
     `;

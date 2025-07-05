@@ -5,6 +5,12 @@ if (typeof window.JobTrackerExtension === 'undefined') {
   
   class JobTrackerExtension {
     constructor() {
+      // Dependencies should be loaded by now
+      if (typeof SiteDetectors === 'undefined' || typeof UIManager === 'undefined') {
+        console.error('❌ Dependencies not loaded when creating JobTrackerExtension');
+        return;
+      }
+      
       this.currentSite = SiteDetectors.detectJobSite();
       this.isTracking = false;
       console.log('🔗 Content script initialized for:', this.currentSite);
@@ -98,20 +104,77 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'showJobTracker') {
     if (!window.jobTrackerExtension) {
       window.jobTrackerExtension = new JobTrackerExtension();
-    } else {
+    } else if (typeof UIManager !== 'undefined') {
       UIManager.showJobTracker();
     }
     sendResponse({ success: true });
   }
   
+  if (request.action === 'extractJobData') {
+    try {
+      if (typeof SiteDetectors !== 'undefined') {
+        const site = SiteDetectors.detectJobSite();
+        let jobData = {};
+        
+        switch (site) {
+          case 'linkedin':
+            jobData = SiteDetectors.extractLinkedInData();
+            break;
+          case 'indeed':
+            jobData = SiteDetectors.extractIndeedData();
+            break;
+          case 'glassdoor':
+            jobData = SiteDetectors.extractGlassdoorData();
+            break;
+          default:
+            jobData = SiteDetectors.extractGenericData();
+        }
+        
+        sendResponse({ success: true, data: jobData });
+      } else {
+        sendResponse({ success: false, error: 'SiteDetectors not available' });
+      }
+    } catch (error) {
+      console.error('Failed to extract job data:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+  }
+  
+  if (request.action === 'getJobData') {
+    // Return current job data if available
+    const jobData = window.currentJobData || {};
+    sendResponse({ success: true, data: jobData });
+  }
+  
   return true; // Keep message channel open for async response
 });
 
-// Initialize extension
+// Initialize extension with dependency checking
 function initializeExtension() {
   const hostname = window.location.hostname.toLowerCase();
   console.log('🚀 Initializing Job Tracker Extension on:', hostname);
-  window.jobTrackerExtension = new JobTrackerExtension();
+  
+  // Check for dependencies
+  const checkDependencies = () => {
+    if (typeof SiteDetectors !== 'undefined' && 
+        typeof UIManager !== 'undefined' && 
+        typeof DataManager !== 'undefined') {
+      console.log('✅ All dependencies loaded, creating extension instance...');
+      if (!window.jobTrackerExtension) {
+        window.jobTrackerExtension = new JobTrackerExtension();
+      }
+    } else {
+      console.log('⏳ Waiting for dependencies to load...', {
+        SiteDetectors: typeof SiteDetectors !== 'undefined',
+        UIManager: typeof UIManager !== 'undefined', 
+        DataManager: typeof DataManager !== 'undefined'
+      });
+      setTimeout(checkDependencies, 500);
+    }
+  };
+  
+  // Start dependency checking after a short delay
+  setTimeout(checkDependencies, 1000);
 }
 
 // Wait for DOM to be ready

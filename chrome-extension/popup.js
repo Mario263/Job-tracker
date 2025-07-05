@@ -1,9 +1,10 @@
-// Simplified popup.js - Chrome extension popup interface
+// Chrome Extension Popup - Fixed to match HTML elements
 
 class ExtensionPopup {
   constructor() {
     this.currentTab = null;
     this.jobData = {};
+    this.authToken = null;
     this.init();
   }
 
@@ -12,9 +13,57 @@ class ExtensionPopup {
     
     try {
       await this.getCurrentTab();
+      await this.loadAuthToken();
+      
+      // If no token found, force sync immediately
+      if (!this.authToken) {
+        console.log('🔄 No token found in popup, forcing sync...');
+        
+        // Try multiple sync methods
+        const syncResponse = await chrome.runtime.sendMessage({
+          action: 'syncAuthToken'
+        });
+        
+        if (syncResponse?.token) {
+          this.authToken = syncResponse.token;
+          console.log('✅ Token synced in popup initialization');
+        } else {
+          // If background sync failed, try direct tab query
+          console.log('🔄 Background sync failed, trying direct tab query...');
+          try {
+            const tabs = await chrome.tabs.query({});
+            const mainAppTabs = tabs.filter(tab => 
+              tab.url && tab.url.includes('localhost:8080')
+            );
+            
+            for (const tab of mainAppTabs) {
+              try {
+                const response = await chrome.tabs.sendMessage(tab.id, {
+                  action: 'getAuthToken'
+                });
+                
+                if (response?.token) {
+                  this.authToken = response.token;
+                  // Store it for the background script too
+                  await chrome.storage.local.set({ authToken: response.token });
+                  console.log('✅ Token synced directly from main app tab');
+                  break;
+                }
+              } catch (tabError) {
+                console.log('Could not message tab:', tab.id);
+              }
+            }
+          } catch (error) {
+            console.log('Direct tab query failed:', error);
+          }
+        }
+      }
+      
       await this.loadJobData();
+      await this.loadStats();
       this.setupEventListeners();
       this.updateUI();
+      this.checkConnection();
       
       console.log('✅ Extension Popup initialized');
     } catch (error) {
@@ -26,6 +75,31 @@ class ExtensionPopup {
   async getCurrentTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     this.currentTab = tab;
+  }
+
+  async loadAuthToken() {
+    try {
+      const result = await chrome.storage.local.get(['authToken']);
+      this.authToken = result.authToken;
+      console.log('🔐 Auth token loaded:', this.authToken ? 'Found' : 'Not found');
+      
+      // If no token, try to sync from main app
+      if (!this.authToken) {
+        console.log('🔄 No token found, attempting sync from main app...');
+        const syncResponse = await chrome.runtime.sendMessage({
+          action: 'syncAuthToken'
+        });
+        
+        if (syncResponse?.token) {
+          this.authToken = syncResponse.token;
+          console.log('✅ Token synced from main app');
+        } else {
+          console.log('⚠️ Could not sync token from main app');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load auth token:', error);
+    }
   }
 
   async loadJobData() {
@@ -43,56 +117,128 @@ class ExtensionPopup {
     }
   }
 
+  async loadStats() {
+    try {
+      if (!this.authToken) {
+        document.getElementById('total-apps').textContent = '0';
+        document.getElementById('this-week').textContent = '0';
+        return;
+      }
+
+      const response = await chrome.runtime.sendMessage({
+        action: 'getApplications'
+      });
+      
+      if (response?.success && response.data) {
+        const apps = response.data;
+        document.getElementById('total-apps').textContent = apps.length;
+        
+        // Calculate this week's applications
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const thisWeek = apps.filter(app => new Date(app.dateAdded) > oneWeekAgo);
+        document.getElementById('this-week').textContent = thisWeek.length;
+        
+        this.updateRecentActivity(apps.slice(0, 3));
+      } else {
+        document.getElementById('total-apps').textContent = '0';
+        document.getElementById('this-week').textContent = '0';
+      }
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+      document.getElementById('total-apps').textContent = '-';
+      document.getElementById('this-week').textContent = '-';
+    }
+  }
+
   setupEventListeners() {
-    // Track Job button
-    document.getElementById('trackJobBtn').addEventListener('click', () => {
-      this.trackCurrentJob();
-    });
+    // Track current job button
+    const trackBtn = document.getElementById('track-current');
+    if (trackBtn) {
+      trackBtn.addEventListener('click', () => {
+        this.trackCurrentJob();
+      });
+    }
 
-    // Open Tracker button  
-    document.getElementById('openTrackerBtn').addEventListener('click', () => {
-      this.openJobTracker();
-    });
+    // Open tracker button  
+    const openBtn = document.getElementById('open-tracker');
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        this.openJobTracker();
+      });
+    }
 
-    // Connection Test button
-    document.getElementById('testConnectionBtn').addEventListener('click', () => {
-      this.testConnection();
-    });
+    // View applications button
+    const viewBtn = document.getElementById('view-applications');
+    if (viewBtn) {
+      viewBtn.addEventListener('click', () => {
+        this.openJobTracker();
+      });
+    }
 
-    // Settings button
-    document.getElementById('settingsBtn').addEventListener('click', () => {
-      this.openSettings();
-    });
+    // Settings link
+    const settingsLink = document.getElementById('settings-link');
+    if (settingsLink) {
+      settingsLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.openSettings();
+      });
+    }
+
+    // Help link
+    const helpLink = document.getElementById('help-link');
+    if (helpLink) {
+      helpLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.openHelp();
+      });
+    }
   }
 
   updateUI() {
-    // Update site info
-    const siteInfo = document.getElementById('siteInfo');
-    const hostname = this.currentTab?.url ? new URL(this.currentTab.url).hostname : 'unknown';
-    siteInfo.textContent = hostname;
-
-    // Update job data display
-    const jobInfo = document.getElementById('jobInfo');
-    if (this.jobData.jobTitle || this.jobData.company) {
-      jobInfo.innerHTML = `
-        <div class="job-details">
-          <div><strong>Title:</strong> ${this.jobData.jobTitle || 'Not detected'}</div>
-          <div><strong>Company:</strong> ${this.jobData.company || 'Not detected'}</div>
-        </div>
-      `;
-    } else {
-      jobInfo.innerHTML = '<div class="no-job-data">No job data detected on this page</div>';
+    // Update page status
+    const pageStatus = document.getElementById('page-status');
+    if (pageStatus) {
+      const hostname = this.currentTab?.url ? new URL(this.currentTab.url).hostname : 'unknown';
+      
+      if (this.isJobSite(hostname)) {
+        if (this.jobData.jobTitle || this.jobData.company) {
+          pageStatus.innerHTML = `
+            ✅ Job detected on ${hostname}<br>
+            <strong>${this.jobData.jobTitle || 'Unknown Title'}</strong><br>
+            <em>${this.jobData.company || 'Unknown Company'}</em>
+          `;
+        } else {
+          // Try to extract job data immediately
+          this.extractJobDataFromPage();
+          pageStatus.textContent = `🔍 Scanning ${hostname} for job details...`;
+        }
+      } else {
+        pageStatus.textContent = `ℹ️ Not a recognized job site (${hostname})`;
+      }
     }
 
-    // Update track button state
-    const trackBtn = document.getElementById('trackJobBtn');
-    if (this.jobData.jobTitle || this.jobData.company) {
-      trackBtn.disabled = false;
-      trackBtn.textContent = '📊 Track This Job';
-    } else {
-      trackBtn.disabled = true;
-      trackBtn.textContent = 'No Job Detected';
+    // Update track button
+    this.updateTrackButton();
+  }
+
+  updateRecentActivity(apps) {
+    const recentList = document.getElementById('recent-list');
+    if (!recentList) return;
+
+    if (apps.length === 0) {
+      recentList.innerHTML = '<div class="activity-item">No recent applications</div>';
+      return;
     }
+
+    const html = apps.map(app => `
+      <div class="activity-item">
+        <strong>${app.jobTitle}</strong> at ${app.company}<br>
+        <small>${new Date(app.dateAdded).toLocaleDateString()}</small>
+      </div>
+    `).join('');
+
+    recentList.innerHTML = html;
   }
 
   async trackCurrentJob() {
@@ -101,19 +247,39 @@ class ExtensionPopup {
     try {
       this.showLoading('Tracking job...');
       
+      // First try to get fresh job data
       const response = await chrome.tabs.sendMessage(this.currentTab.id, {
-        action: 'showJobTracker'
+        action: 'extractJobData'
       });
       
-      if (response?.success) {
-        this.showSuccess('Job tracker opened!');
-        setTimeout(() => window.close(), 1000);
+      if (response?.data) {
+        this.jobData = response.data;
+      }
+
+      // Save the job data
+      const saveResponse = await chrome.runtime.sendMessage({
+        action: 'saveApplication',
+        data: {
+          jobTitle: this.jobData.jobTitle || 'Unknown Position',
+          company: this.jobData.company || 'Unknown Company',
+          location: this.jobData.location || '',
+          description: this.jobData.description || '',
+          url: this.currentTab.url,
+          status: 'applied',
+          priority: 'medium'
+        }
+      });
+      
+      if (saveResponse?.success) {
+        this.showSuccess('✅ Job tracked successfully!');
+        await this.loadStats(); // Refresh stats
+        setTimeout(() => window.close(), 2000);
       } else {
-        throw new Error('Failed to open job tracker');
+        throw new Error(saveResponse?.error || 'Failed to save application');
       }
     } catch (error) {
       console.error('Failed to track job:', error);
-      this.showError('Failed to open job tracker. Please try refreshing the page.');
+      this.showError(`❌ ${error.message}`);
     }
   }
 
@@ -130,60 +296,144 @@ class ExtensionPopup {
     }
   }
 
-  async testConnection() {
+  async checkConnection() {
     try {
-      this.showLoading('Testing connection...');
-      
       const response = await chrome.runtime.sendMessage({
         action: 'testConnection'
       });
       
-      if (response?.connected) {
-        this.showSuccess('✅ Connected to cloud API');
+      const statusEl = document.getElementById('connection-status');
+      if (!statusEl) return;
+
+      if (this.authToken && response?.connected) {
+        // Try to get user data
+        const userData = await chrome.storage.local.get(['userData']);
+        const userName = userData.userData?.name || 'User';
+        
+        statusEl.className = 'status-indicator status-connected';
+        statusEl.innerHTML = `<div class="status-dot"></div><span>✅ Signed in as ${userName}</span>`;
+      } else if (response?.connected) {
+        statusEl.className = 'status-indicator status-offline';
+        statusEl.innerHTML = '<div class="status-dot"></div><span>⚠️ Connected but not signed in</span>';
+        
+        // Try to sync token automatically
+        console.log('Not authenticated, attempting token sync...');
+        const syncResponse = await chrome.runtime.sendMessage({
+          action: 'syncAuthToken'
+        });
+        
+        if (syncResponse?.token) {
+          this.authToken = syncResponse.token;
+          statusEl.className = 'status-indicator status-connected';
+          statusEl.innerHTML = '<div class="status-dot"></div><span>✅ Authentication synced</span>';
+          
+          // Reload stats and update UI
+          await this.loadStats();
+          this.updateTrackButton();
+        }
       } else {
-        this.showWarning('⚠️ Cloud API not available');
+        statusEl.className = 'status-indicator status-offline';
+        statusEl.innerHTML = '<div class="status-dot"></div><span>❌ Offline - Check connection</span>';
       }
     } catch (error) {
-      console.error('Connection test failed:', error);
-      this.showError('❌ Connection test failed');
+      console.error('Connection check failed:', error);
+      const statusEl = document.getElementById('connection-status');
+      if (statusEl) {
+        statusEl.className = 'status-indicator status-offline';
+        statusEl.innerHTML = '<div class="status-dot"></div><span>❌ Connection failed</span>';
+      }
     }
   }
 
   openSettings() {
-    chrome.runtime.openOptionsPage();
+    chrome.tabs.create({ url: 'http://localhost:8080/signin.html' });
+  }
+
+  openHelp() {
+    chrome.tabs.create({ url: 'http://localhost:8080' });
+  }
+
+  async extractJobDataFromPage() {
+    if (!this.currentTab) return;
+    
+    try {
+      const response = await chrome.tabs.sendMessage(this.currentTab.id, {
+        action: 'extractJobData'
+      });
+      
+      if (response?.data) {
+        this.jobData = response.data;
+        console.log('✅ Job data extracted:', this.jobData);
+        
+        // Update UI with new data
+        const pageStatus = document.getElementById('page-status');
+        if (pageStatus && (this.jobData.jobTitle || this.jobData.company)) {
+          const hostname = new URL(this.currentTab.url).hostname;
+          pageStatus.innerHTML = `
+            ✅ Job detected on ${hostname}<br>
+            <strong>${this.jobData.jobTitle || 'Unknown Title'}</strong><br>
+            <em>${this.jobData.company || 'Unknown Company'}</em>
+          `;
+          
+          // Update button state
+          this.updateTrackButton();
+        }
+      }
+    } catch (error) {
+      console.log('Could not extract job data:', error);
+    }
+  }
+
+  updateTrackButton() {
+    const trackBtn = document.getElementById('track-current');
+    if (trackBtn) {
+      if (!this.authToken) {
+        trackBtn.disabled = true;
+        trackBtn.textContent = '🔒 Sign in Required';
+        trackBtn.style.background = '#95a5a6';
+      } else if (this.jobData.jobTitle || this.jobData.company) {
+        trackBtn.disabled = false;
+        trackBtn.textContent = '📊 Track This Job';
+        trackBtn.style.background = 'linear-gradient(135deg, #27ae60, #229954)';
+      } else {
+        trackBtn.disabled = true;
+        trackBtn.textContent = '🔍 No Job Detected';
+        trackBtn.style.background = '#95a5a6';
+      }
+    }
+  }
+
+  isJobSite(hostname) {
+    const jobSites = [
+      'linkedin.com', 'indeed.com', 'glassdoor.com', 
+      'angel.co', 'wellfound.com', 'ziprecruiter.com',
+      'jobvite.com', 'workday.com', 'lever.co', 'greenhouse.io'
+    ];
+    return jobSites.some(site => hostname.includes(site));
   }
 
   showLoading(message) {
-    const status = document.getElementById('status');
-    status.textContent = message;
-    status.className = 'status loading';
+    const statusEl = document.getElementById('connection-status');
+    if (statusEl) {
+      statusEl.className = 'status-indicator';
+      statusEl.innerHTML = `<div class="status-dot"></div><span>🔄 ${message}</span>`;
+    }
   }
 
   showSuccess(message) {
-    const status = document.getElementById('status');
-    status.textContent = message;
-    status.className = 'status success';
-    setTimeout(() => this.clearStatus(), 3000);
+    const statusEl = document.getElementById('connection-status');
+    if (statusEl) {
+      statusEl.className = 'status-indicator status-connected';
+      statusEl.innerHTML = `<div class="status-dot"></div><span>${message}</span>`;
+    }
   }
 
   showError(message) {
-    const status = document.getElementById('status');
-    status.textContent = message;
-    status.className = 'status error';
-    setTimeout(() => this.clearStatus(), 5000);
-  }
-
-  showWarning(message) {
-    const status = document.getElementById('status');
-    status.textContent = message;
-    status.className = 'status warning';
-    setTimeout(() => this.clearStatus(), 4000);
-  }
-
-  clearStatus() {
-    const status = document.getElementById('status');
-    status.textContent = '';
-    status.className = 'status';
+    const statusEl = document.getElementById('connection-status');
+    if (statusEl) {
+      statusEl.className = 'status-indicator status-offline';
+      statusEl.innerHTML = `<div class="status-dot"></div><span>${message}</span>`;
+    }
   }
 }
 
