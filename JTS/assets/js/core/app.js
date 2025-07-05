@@ -78,6 +78,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   console.log('🚀 Initializing Job Tracker with Apple-inspired design...');
   
   try {
+    // Wait for authentication before initializing app
+    console.log('🔐 Waiting for authentication check...');
+    await waitForAuthentication();
+    
     // Initialize all components
     await initializeApp();
     console.log('✅ Job Tracker initialized successfully');
@@ -87,13 +91,29 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 });
 
+// Wait for authentication to complete
+async function waitForAuthentication() {
+  return new Promise((resolve) => {
+    const checkAuth = () => {
+      if (window.AuthCheck) {
+        // Authentication module is loaded, proceed
+        resolve();
+      } else {
+        // Wait a bit longer for auth module to load
+        setTimeout(checkAuth, 100);
+      }
+    };
+    checkAuth();
+  });
+}
+
 // Main initialization function
 async function initializeApp() {
   // Check API health and load data
   await loadAllData();
   
   // Initialize UI components
-  initializeUI();
+  await initializeUI();
   
   // Set up event listeners
   setupEventListeners();
@@ -154,20 +174,32 @@ async function loadAllData() {
 }
 
 // Initialize UI components
-function initializeUI() {
-  // Render initial data using module methods
-  if (window.ApplicationsModule && window.ApplicationsModule.renderApplications) {
-    window.ApplicationsModule.renderApplications();
+async function initializeUI() {
+  console.log('🎨 Initializing UI components...');
+  
+  // Initialize applications module first
+  if (window.ApplicationsModule && window.ApplicationsModule.initialize) {
+    console.log('📋 Initializing applications module...');
+    await window.ApplicationsModule.initialize();
   }
-  if (window.ContactsModule && window.ContactsModule.renderContacts) {
-    window.ContactsModule.renderContacts();
+  
+  // Initialize other modules
+  if (window.ContactsModule && window.ContactsModule.initialize) {
+    console.log('👥 Initializing contacts module...');
+    await window.ContactsModule.initialize();
   }
-  if (window.ResumesModule && window.ResumesModule.renderResumes) {
-    window.ResumesModule.renderResumes();
+  
+  if (window.ResumesModule && window.ResumesModule.initialize) {
+    console.log('📄 Initializing resumes module...');
+    await window.ResumesModule.initialize();
   }
+  
+  // Update resume dropdown
   if (window.ResumesModule && window.ResumesModule.updateResumeDropdown) {
     window.ResumesModule.updateResumeDropdown();
   }
+  
+  console.log('✅ UI components initialized');
 }
 
 // Enhanced tab switching with animations

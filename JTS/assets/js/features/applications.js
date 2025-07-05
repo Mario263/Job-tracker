@@ -37,7 +37,10 @@
         throw new Error('API service not available');
       }
       
+      console.log('🔄 Fetching applications from API...');
       applications = await window.apiService.getApplications();
+      
+      console.log('✅ Applications loaded:', applications);
       
       // Update global reference for backward compatibility
       window.applications = applications;
@@ -206,7 +209,12 @@
   // Render applications table with given data
   function renderApplicationsTable(appData) {
     const tbody = document.getElementById('applicationsBody');
-    if (!tbody) return;
+    if (!tbody) {
+      console.error('❌ applications table body element not found in DOM');
+      return;
+    }
+    
+    console.log(`📋 Rendering applications table with ${appData.length} applications`);
     
     tbody.innerHTML = '';
     
@@ -219,6 +227,7 @@
           </td>
         </tr>
       `;
+      console.log('📋 Displayed "no applications" message');
       return;
     }
     
@@ -260,6 +269,8 @@
       
       tbody.appendChild(row);
     });
+    
+    console.log(`✅ Successfully rendered ${appData.length} application rows in table`);
   }
   
   // Edit application
@@ -561,11 +572,15 @@
   window.clearForm = clearForm;
   window.filterApplications = filterApplications;
   
-  // Auto-initialize when DOM is ready
+  // Auto-initialize when DOM is ready (but wait for authentication)
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
+    document.addEventListener('DOMContentLoaded', () => {
+      // Don't auto-initialize - let the main app handle initialization after auth
+      console.log('📋 Applications module DOM ready, waiting for main app initialization...');
+    });
   } else {
-    initialize();
+    // Don't auto-initialize - let the main app handle initialization after auth
+    console.log('📋 Applications module loaded, waiting for main app initialization...');
   }
   
   console.log('📋 Applications module loaded successfully (Cloud-Only)');

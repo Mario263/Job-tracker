@@ -7,6 +7,7 @@ class APIService {
     this.baseURL = this.determineBaseURL();
     this.retryAttempts = 3;
     this.retryDelay = 1000;
+    this.authToken = null;
     
     console.log('🚀 API Service initialized with base URL:', this.baseURL);
     
@@ -44,6 +45,12 @@ class APIService {
   }
 
 
+  // Set authentication token
+  setAuthToken(token) {
+    this.authToken = token;
+    console.log('🔐 Authentication token set for API service');
+  }
+
   // Generic request handler with comprehensive error handling
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}/api${endpoint}`;
@@ -55,6 +62,11 @@ class APIService {
       },
       ...options
     };
+
+    // Add authentication token if available
+    if (this.authToken) {
+      config.headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
 
     // Add timeout to prevent hanging requests
     const controller = new AbortController();
