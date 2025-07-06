@@ -4,7 +4,7 @@ const DataManager = {
   primaryApiUrl: 'http://localhost:3001',
   frontendUrl: 'http://localhost:8080',
 
-  // Enhanced save functionality
+  // Cloud-only save functionality
   async saveApplication(openTracker = false) {
     console.log('saveApplication called with openTracker:', openTracker);
     const formData = this.collectFormData();
@@ -18,51 +18,55 @@ const DataManager = {
     UIManager.showStatus('Saving application...', 'loading');
 
     try {
-      // Always save to local storage first
-      console.log('Saving to local storage...');
-      await this.saveToLocalStorage(formData);
-      console.log('Local storage save completed');
-      
-      // Notify website immediately
+      // Notify website about new application
       console.log('Notifying website about new application...');
       await this.notifyWebsiteOfNewApplication(formData);
       
-      // Try to save to API
+      // Save directly to cloud API only
       let apiSaveSuccess = false;
       
       try {
-        console.log('Attempting API save to:', this.primaryApiUrl);
+        console.log('Attempting cloud API save to:', this.primaryApiUrl);
         const result = await this.saveViaBackgroundScript(formData);
         if (result.success) {
           apiSaveSuccess = true;
-          UIManager.showStatus('✅ Application saved and synced to cloud!', 'success');
+          UIManager.showStatus('✅ Application saved to cloud!', 'success');
         } else {
           throw new Error(result.error || 'Background script save failed');
         }
       } catch (error) {
-        console.warn('API save failed:', error);
+        console.warn('Background API save failed:', error);
         try {
           await this.saveToAPI(this.primaryApiUrl, formData);
           apiSaveSuccess = true;
-          UIManager.showStatus('✅ Application saved and synced to cloud!', 'success');
+          UIManager.showStatus('✅ Application saved to cloud!', 'success');
         } catch (directError) {
-          console.warn('Direct API save also failed:', directError);
-          UIManager.showStatus('✅ Application saved locally - will sync when online', 'success');
+          console.error('Cloud API save failed:', directError);
+          if (directError.message.includes('Authentication required')) {
+            UIManager.showStatus('❌ Please sign in to Job Tracker to save applications', 'error');
+          } else if (directError.message.includes('timeout') || directError.message.includes('offline')) {
+            UIManager.showStatus('❌ Connection failed - please check your internet connection', 'error');
+          } else {
+            UIManager.showStatus('❌ Failed to save to cloud - please try again', 'error');
+          }
+          return; // Don't proceed if save failed
         }
       }
 
-      // Close modal after delay
-      setTimeout(() => {
-        const modal = document.getElementById('job-tracker-modal');
-        if (modal) {
-          modal.remove();
-        }
-        
-        if (openTracker) {
-          console.log('Opening tracker at:', this.frontendUrl);
-          this.openTrackerWithNewApplication(formData);
-        }
-      }, 2000);
+      // Only close modal and open tracker if save was successful
+      if (apiSaveSuccess) {
+        setTimeout(() => {
+          const modal = document.getElementById('job-tracker-modal');
+          if (modal) {
+            modal.remove();
+          }
+          
+          if (openTracker) {
+            console.log('Opening tracker at:', this.frontendUrl);
+            this.openTrackerWithNewApplication(formData);
+          }
+        }, 2000);
+      }
 
     } catch (error) {
       console.error('Save failed:', error);
@@ -90,80 +94,30 @@ const DataManager = {
     };
   },
 
-  // Enhanced Chrome extension storage
-  async saveToLocalStorage(applicationData) {
-    console.log('Attempting to save application data:', applicationData.jobTitle);
-    
-    return new Promise((resolve, reject) => {
-      try {
-        if (typeof chrome === 'undefined' || !chrome.storage) {
-          console.log('Chrome storage not available, using localStorage fallback');
-          this.saveToLocalStorageFallback(applicationData);
-          resolve();
-          return;
-        }
-        
-        chrome.storage.local.get(['jobApplications'], (result) => {
-          if (chrome.runtime.lastError) {
-            console.warn('Chrome storage error:', chrome.runtime.lastError.message);
-            this.saveToLocalStorageFallback(applicationData);
-            resolve();
-            return;
-          }
-          
-          const applications = result.jobApplications || [];
-          applications.push(applicationData);
-          
-          chrome.storage.local.set({ 
-            jobApplications: applications,
-            lastSync: new Date().toISOString()
-          }, () => {
-            if (chrome.runtime.lastError) {
-              console.warn('Chrome storage set error:', chrome.runtime.lastError.message);
-              this.saveToLocalStorageFallback(applicationData);
-              resolve();
-              return;
-            }
-            console.log('✅ Application saved to Chrome storage:', applicationData.jobTitle);
-            resolve();
-          });
-        });
-      } catch (error) {
-        console.warn('Chrome storage exception, using fallback:', error);
-        this.saveToLocalStorageFallback(applicationData);
-        resolve();
-      }
-    });
-  },
-
-  saveToLocalStorageFallback(applicationData) {
-    try {
-      const applications = JSON.parse(localStorage.getItem('jobApplications') || '[]');
-      applications.push(applicationData);
-      localStorage.setItem('jobApplications', JSON.stringify(applications));
-      localStorage.setItem('lastSync', new Date().toISOString());
-      console.log('✅ Application saved to localStorage:', applicationData.jobTitle);
-    } catch (localStorageError) {
-      console.error('LocalStorage save failed:', localStorageError);
-      throw localStorageError;
-    }
-  },
+  // This is a cloud-only application - no local storage functionality
 
   // Notification system
   async notifyWebsiteOfNewApplication(applicationData) {
     try {
-      if (typeof chrome !== 'undefined' && chrome.runtime) {
+      // Check if extension context is valid
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
         chrome.runtime.sendMessage({
           action: 'notifyApplicationAdded',
           application: applicationData,
           frontendUrl: this.frontendUrl
         }, (response) => {
           if (chrome.runtime.lastError) {
-            console.log('Background script communication failed:', chrome.runtime.lastError.message);
+            if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+              console.warn('⚠️ Extension context invalidated. Please reload the extension.');
+            } else {
+              console.log('Background script communication failed:', chrome.runtime.lastError.message);
+            }
           } else {
             console.log('✅ Notified background script about new application');
           }
         });
+      } else {
+        console.warn('⚠️ Extension context invalid or unavailable, skipping background notification');
       }
       
       // Trigger storage event for immediate sync
@@ -174,28 +128,45 @@ const DataManager = {
       
       console.log('✅ Application notification sent');
     } catch (error) {
-      console.warn('Failed to notify website:', error);
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        console.warn('⚠️ Extension context invalidated. Please reload the extension.');
+      } else {
+        console.warn('Failed to notify website:', error);
+      }
     }
   },
 
   // Save via background script
   async saveViaBackgroundScript(applicationData) {
     return new Promise((resolve, reject) => {
-      if (typeof chrome === 'undefined' || !chrome.runtime) {
-        reject(new Error('Chrome runtime not available'));
+      // Check if extension context is valid
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+        reject(new Error('Extension context invalidated. Please reload the extension.'));
         return;
       }
 
-      chrome.runtime.sendMessage({
-        action: 'saveApplication',
-        data: applicationData
-      }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
+      try {
+        chrome.runtime.sendMessage({
+          action: 'saveApplication',
+          data: applicationData
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+              reject(new Error('Extension context invalidated. Please reload the extension.'));
+            } else {
+              reject(new Error(chrome.runtime.lastError.message));
+            }
+            return;
+          }
+          resolve(response);
+        });
+      } catch (error) {
+        if (error.message && error.message.includes('Extension context invalidated')) {
+          reject(new Error('Extension context invalidated. Please reload the extension.'));
+        } else {
+          reject(error);
         }
-        resolve(response);
-      });
+      }
     });
   },
 
@@ -207,13 +178,19 @@ const DataManager = {
     try {
       // Get auth token from storage
       let authToken = null;
-      if (typeof chrome !== 'undefined' && chrome.storage) {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.runtime && chrome.runtime.id) {
         try {
           const result = await chrome.storage.local.get(['authToken']);
           authToken = result.authToken;
         } catch (error) {
-          console.warn('Could not get auth token from storage:', error);
+          if (error.message && error.message.includes('Extension context invalidated')) {
+            console.warn('⚠️ Extension context invalidated, cannot get auth token');
+          } else {
+            console.warn('Could not get auth token from storage:', error);
+          }
         }
+      } else {
+        console.warn('⚠️ Extension context invalid or chrome.storage unavailable');
       }
 
       if (!authToken) {
@@ -267,16 +244,32 @@ const DataManager = {
         }
       }, 3000);
       
-      if (typeof chrome !== 'undefined' && chrome.runtime) {
+      // Check if extension context is valid before sending message
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
         chrome.runtime.sendMessage({
           action: 'notifyApplicationAdded',
           application: applicationData,
           frontendUrl: this.frontendUrl
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+              console.warn('⚠️ Extension context invalidated. Please reload the extension.');
+            } else {
+              console.log('Background script notification failed:', chrome.runtime.lastError.message);
+            }
+          }
         });
+      } else {
+        console.warn('⚠️ Extension context invalid or unavailable, skipping background notification');
       }
       
     } catch (error) {
-      console.error('Failed to open tracker:', error);
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        console.warn('⚠️ Extension context invalidated. Please reload the extension.');
+      } else {
+        console.error('Failed to open tracker:', error);
+      }
+      // Fallback: still try to open the tracker
       window.open(this.frontendUrl, '_blank');
     }
   }

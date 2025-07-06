@@ -46,6 +46,11 @@ const UIManager = {
     
     document.body.appendChild(modal);
     this.setupModalEvents(modal);
+    
+    // Ensure form fields are editable after a short delay
+    setTimeout(() => {
+      this.prefillForm();
+    }, 100);
   },
 
   createModalHTML() {
@@ -200,12 +205,28 @@ const UIManager = {
   },
 
   prefillForm() {
+    console.log('🔧 Prefilling and enabling form fields...');
     const jobData = window.currentJobData || {};
     
+    // First ensure all form fields are interactive regardless of prefill data
+    const allFormFields = document.querySelectorAll('#job-tracker-form input, #job-tracker-form select, #job-tracker-form textarea');
+    console.log(`Found ${allFormFields.length} form fields to enable`);
+    
+    allFormFields.forEach((field, index) => {
+      field.disabled = false;
+      field.readOnly = false;
+      field.style.pointerEvents = 'auto';
+      field.style.cursor = field.tagName === 'SELECT' ? 'pointer' : 'text';
+      field.style.opacity = '1';
+      field.style.backgroundColor = field.tagName === 'SELECT' ? '#fff' : '#fff';
+      console.log(`Enabled field ${index + 1}: ${field.id || field.name || 'unnamed'}`);
+    });
+    
+    // Then prefill with detected data
     const formData = {
       'jt-jobTitle': jobData.jobTitle,
       'jt-company': jobData.company,
-      'jt-jobPortal': jobData.jobPortal,
+      'jt-jobPortal': jobData.jobPortal || this.detectJobPortal(),
       'jt-location': jobData.location,
       'jt-jobType': jobData.jobType,
       'jt-salaryRange': jobData.salaryRange
@@ -215,34 +236,37 @@ const UIManager = {
       const element = document.getElementById(id);
       if (element && value) {
         element.value = value;
-        element.disabled = false;
-        element.readOnly = false;
-        element.style.pointerEvents = 'auto';
-        element.style.cursor = element.tagName === 'SELECT' ? 'pointer' : 'text';
+        console.log(`Prefilled ${id} with: ${value}`);
       }
     });
 
     // Set job URL in hidden field
     const jobUrlInput = document.getElementById('jt-jobUrl');
     if (jobUrlInput) {
-      jobUrlInput.value = jobData.jobUrl;
+      jobUrlInput.value = jobData.jobUrl || window.location.href;
     } else {
       // Create hidden field for job URL
       const hiddenInput = document.createElement('input');
       hiddenInput.type = 'hidden';
       hiddenInput.id = 'jt-jobUrl';
-      hiddenInput.value = jobData.jobUrl;
-      document.getElementById('job-tracker-form').appendChild(hiddenInput);
+      hiddenInput.value = jobData.jobUrl || window.location.href;
+      const form = document.getElementById('job-tracker-form');
+      if (form) {
+        form.appendChild(hiddenInput);
+      }
     }
     
-    // Ensure all form fields are interactive
-    const allFormFields = document.querySelectorAll('#job-tracker-form input, #job-tracker-form select, #job-tracker-form textarea');
-    allFormFields.forEach(field => {
-      field.disabled = false;
-      field.readOnly = false;
-      field.style.pointerEvents = 'auto';
-      field.style.cursor = field.tagName === 'SELECT' ? 'pointer' : 'text';
-    });
+    console.log('✅ Form prefill and enabling completed');
+  },
+  
+  detectJobPortal() {
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname.includes('linkedin')) return 'LinkedIn';
+    if (hostname.includes('indeed')) return 'Indeed';
+    if (hostname.includes('glassdoor')) return 'Glassdoor';
+    if (hostname.includes('angel') || hostname.includes('wellfound')) return 'AngelList';
+    if (hostname.includes('ziprecruiter')) return 'ZipRecruiter';
+    return 'Other';
   },
 
   showStatus(message, type) {

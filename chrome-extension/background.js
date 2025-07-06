@@ -156,6 +156,11 @@ class JobTrackerBackground {
           sendResponse({ success: true, message: 'Extension is active' });
           break;
 
+        case 'userSignedOut':
+          await this.handleUserSignOut();
+          sendResponse({ success: true, message: 'Extension data cleared' });
+          break;
+
         default:
           sendResponse({ success: false, error: 'Unknown action' });
       }
@@ -395,6 +400,20 @@ class JobTrackerBackground {
       console.log('✅ Auth token removed from extension');
     } catch (error) {
       console.error('Failed to remove auth token:', error);
+    }
+  }
+  
+  // Handle user sign out - clear all extension data
+  async handleUserSignOut() {
+    try {
+      console.log('🚪 User signed out, clearing extension data...');
+      
+      // Clear all stored data
+      await chrome.storage.local.clear();
+      
+      console.log('✅ Extension data cleared after sign out');
+    } catch (error) {
+      console.error('Failed to clear extension data on sign out:', error);
     }
   }
 

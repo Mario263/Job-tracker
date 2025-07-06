@@ -38,6 +38,11 @@ class ExtensionPopup {
             
             for (const tab of mainAppTabs) {
               try {
+                if (!chrome.runtime || !chrome.runtime.id) {
+                  console.warn('⚠️ Extension context invalid, cannot message tabs');
+                  break;
+                }
+                
                 const response = await chrome.tabs.sendMessage(tab.id, {
                   action: 'getAuthToken'
                 });
@@ -45,12 +50,27 @@ class ExtensionPopup {
                 if (response?.token) {
                   this.authToken = response.token;
                   // Store it for the background script too
-                  await chrome.storage.local.set({ authToken: response.token });
-                  console.log('✅ Token synced directly from main app tab');
+                  if (chrome.runtime && chrome.runtime.id) {
+                    try {
+                      await chrome.storage.local.set({ authToken: response.token });
+                      console.log('✅ Token synced directly from main app tab');
+                    } catch (storageError) {
+                      if (storageError.message && storageError.message.includes('Extension context invalidated')) {
+                        console.warn('⚠️ Extension context invalidated, cannot store token');
+                      } else {
+                        console.warn('Failed to store token:', storageError);
+                      }
+                    }
+                  }
                   break;
                 }
               } catch (tabError) {
-                console.log('Could not message tab:', tab.id);
+                if (tabError.message && tabError.message.includes('Extension context invalidated')) {
+                  console.warn('⚠️ Extension context invalidated, cannot message tabs');
+                  break;
+                } else {
+                  console.log('Could not message tab:', tab.id);
+                }
               }
             }
           } catch (error) {
@@ -79,26 +99,44 @@ class ExtensionPopup {
 
   async loadAuthToken() {
     try {
-      const result = await chrome.storage.local.get(['authToken']);
-      this.authToken = result.authToken;
-      console.log('🔐 Auth token loaded:', this.authToken ? 'Found' : 'Not found');
+      if (chrome.runtime && chrome.runtime.id) {
+        const result = await chrome.storage.local.get(['authToken']);
+        this.authToken = result.authToken;
+        console.log('🔐 Auth token loaded:', this.authToken ? 'Found' : 'Not found');
+      } else {
+        console.warn('⚠️ Extension context invalid, cannot load auth token');
+      }
       
       // If no token, try to sync from main app
       if (!this.authToken) {
         console.log('🔄 No token found, attempting sync from main app...');
-        const syncResponse = await chrome.runtime.sendMessage({
-          action: 'syncAuthToken'
-        });
-        
-        if (syncResponse?.token) {
-          this.authToken = syncResponse.token;
-          console.log('✅ Token synced from main app');
-        } else {
-          console.log('⚠️ Could not sync token from main app');
+        if (chrome.runtime && chrome.runtime.id) {
+          try {
+            const syncResponse = await chrome.runtime.sendMessage({
+              action: 'syncAuthToken'
+            });
+            
+            if (syncResponse?.token) {
+              this.authToken = syncResponse.token;
+              console.log('✅ Token synced from main app');
+            } else {
+              console.log('⚠️ Could not sync token from main app');
+            }
+          } catch (syncError) {
+            if (syncError.message && syncError.message.includes('Extension context invalidated')) {
+              console.warn('⚠️ Extension context invalidated, cannot sync token');
+            } else {
+              console.log('⚠️ Could not sync token from main app:', syncError);
+            }
+          }
         }
       }
     } catch (error) {
-      console.error('Failed to load auth token:', error);
+      if (error.message && error.message.includes('Extension context invalidated')) {
+        console.warn('⚠️ Extension context invalidated, cannot load auth token');
+      } else {
+        console.error('Failed to load auth token:', error);
+      }
     }
   }
 
@@ -125,6 +163,13 @@ class ExtensionPopup {
         return;
       }
 
+      if (!chrome.runtime || !chrome.runtime.id) {
+        console.warn('⚠️ Extension context invalid, cannot load stats');
+        document.getElementById('total-apps').textContent = '-';
+        document.getElementById('this-week').textContent = '-';
+        return;
+      }
+      
       const response = await chrome.runtime.sendMessage({
         action: 'getApplications'
       });
@@ -257,6 +302,10 @@ class ExtensionPopup {
       }
 
       // Save the job data
+      if (!chrome.runtime || !chrome.runtime.id) {
+        throw new Error('Extension context invalidated. Please reload the extension.');
+      }
+      
       const saveResponse = await chrome.runtime.sendMessage({
         action: 'saveApplication',
         data: {
@@ -264,9 +313,9 @@ class ExtensionPopup {
           company: this.jobData.company || 'Unknown Company',
           location: this.jobData.location || '',
           description: this.jobData.description || '',
-          url: this.currentTab.url,
-          status: 'applied',
-          priority: 'medium'
+          jobUrl: this.currentTab.url,
+          status: 'Applied',
+          priority: 'Medium'
         }
       });
       
@@ -298,6 +347,15 @@ class ExtensionPopup {
 
   async checkConnection() {
     try {
+      if (!chrome.runtime || !chrome.runtime.id) {
+        const statusEl = document.getElementById('connection-status');
+        if (statusEl) {
+          statusEl.className = 'status-indicator status-offline';
+          statusEl.innerHTML = '<div class="status-dot"></div><span>❌ Extension context invalid</span>';
+        }
+        return;
+      }
+      
       const response = await chrome.runtime.sendMessage({
         action: 'testConnection'
       });
@@ -307,8 +365,19 @@ class ExtensionPopup {
 
       if (this.authToken && response?.connected) {
         // Try to get user data
-        const userData = await chrome.storage.local.get(['userData']);
-        const userName = userData.userData?.name || 'User';
+        let userName = 'User';
+        if (chrome.runtime && chrome.runtime.id) {
+          try {
+            const userData = await chrome.storage.local.get(['userData']);
+            userName = userData.userData?.name || 'User';
+          } catch (userDataError) {
+            if (userDataError.message && userDataError.message.includes('Extension context invalidated')) {
+              console.warn('⚠️ Extension context invalidated, using default username');
+            } else {
+              console.warn('Failed to get user data:', userDataError);
+            }
+          }
+        }
         
         statusEl.className = 'status-indicator status-connected';
         statusEl.innerHTML = `<div class="status-dot"></div><span>✅ Signed in as ${userName}</span>`;
@@ -318,6 +387,11 @@ class ExtensionPopup {
         
         // Try to sync token automatically
         console.log('Not authenticated, attempting token sync...');
+        if (!chrome.runtime || !chrome.runtime.id) {
+          console.warn('⚠️ Extension context invalid, cannot sync token');
+          return;
+        }
+        
         const syncResponse = await chrome.runtime.sendMessage({
           action: 'syncAuthToken'
         });

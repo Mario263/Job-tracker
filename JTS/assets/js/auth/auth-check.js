@@ -150,6 +150,9 @@
   function signOut() {
     clearAuthData();
     
+    // Notify Chrome extension to clear its data
+    notifyExtensionSignOut();
+    
     // Call sign out API
     const token = localStorage.getItem('jobTracker_token');
     if (token) {
@@ -172,6 +175,23 @@
     setTimeout(() => {
       redirectToSignIn();
     }, 1000);
+  }
+  
+  // Notify Chrome extension when user signs out
+  function notifyExtensionSignOut() {
+    if (typeof chrome !== 'undefined' && chrome.runtime) {
+      try {
+        chrome.runtime.sendMessage({
+          action: 'userSignedOut'
+        }, (response) => {
+          if (!chrome.runtime.lastError) {
+            console.log('✅ Extension notified of sign out');
+          }
+        });
+      } catch (error) {
+        console.log('📱 Could not notify extension of sign out:', error);
+      }
+    }
   }
   
   // Add sign out button to the interface
